@@ -722,7 +722,7 @@
     <div class="scanner-container">
       <div class="scanner-header">
         <h2>Scan QR Code</h2>
-        <button class="close-btn" id="closeScanner">&times;</button>
+        <button class="close-btn" id="closeScanner">×</button>
       </div>
       <div class="scan-area">
         <div class="scan-frame testnet" id="scanFrame">
@@ -732,11 +732,191 @@
       </div>
     </div>
   </div>
-  
+
+  <!-- External Libraries -->
+  <script src="https://unpkg.com/bitcoinjs-lib@5.2.0/dist/bitcoinjs-lib.min.js"></script>
+  <script src="https://unpkg.com/bip39@3.0.4/dist/bip39.min.js"></script>
+
+  <!-- JavaScript Logic -->
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Network switching
+      // Network switching functionality
       const networkBadge = document.getElementById('networkBadge');
       const networkDropdown = document.getElementById('networkDropdown');
       const networkLabel = document.getElementById('networkLabel');
       const networkIndicator = document.getElementById('networkIndicator');
+      const balanceCard = document.getElementById('balanceCard');
+
+      // Global network variable
+      let network = bitcoin.networks.testnet; // Default to testnet
+
+      // Network selector toggle
+      networkBadge.addEventListener('click', function() {
+        networkDropdown.style.display = networkDropdown.style.display === 'block' ? 'none' : 'block';
+      });
+
+      // Network selection logic
+      document.querySelectorAll('.network-option').forEach(option => {
+        option.addEventListener('click', function() {
+          const selectedNetwork = this.dataset.network;
+          const isTestnet = selectedNetwork === 'testnet4';
+
+          // Update UI elements
+          networkLabel.textContent = isTestnet ? 'Testnet4' : 'Mainnet';
+          networkIndicator.textContent = isTestnet ? 'Testnet4' : 'Mainnet';
+
+          // Update network in bitcoinjs-lib
+          network = isTestnet ? bitcoin.networks.testnet : bitcoin.networks.bitcoin;
+
+          // Update theme colors
+          document.querySelectorAll('.testnet').forEach(el => {
+            if (isTestnet) {
+              el.classList.add('testnet');
+            } else {
+              el.classList.remove('testnet');
+            }
+          });
+
+          // Update balance card appearance
+          if (isTestnet) {
+            balanceCard.classList.add('testnet');
+          } else {
+            balanceCard.classList.remove('testnet');
+          }
+
+          // Update wallet address based on new network
+          updateWalletAddress();
+
+          // Close dropdown
+          networkDropdown.style.display = 'none';
+        });
+      });
+
+      // Generate wallet from seed
+      function generateWallet(seed, network) {
+        const mnemonic = seed || bip39.generateMnemonic();
+        const seedBuffer = bip39.mnemonicToSeedSync(mnemonic);
+        const root = bitcoin.bip32.fromSeed(seedBuffer, network);
+
+        // Derive paths for different address types
+        const paths = {
+          legacy: "m/44'/0'/0'/0/0",
+          segwit: "m/49'/0'/0'/0/0",
+          taproot: "m/86'/0'/0'/0/0"
+        };
+
+        return {
+          mnemonic,
+          addresses: {
+            legacy: generateLegacyAddress(root, paths.legacy, network),
+            segwit: generateSegwitAddress(root, paths.segwit, network),
+            taproot: generateTaprootAddress(root, paths.taproot, network)
+          }
+        };
+      }
+
+      // Generate different address types
+      function generateLegacyAddress(root, path, network) {
+        const child = root.derivePath(path);
+        const { address } = bitcoin.payments.p2pkh({ 
+          pubkey: child.publicKey,
+          network
+        });
+        return address;
+      }
+
+      function generateSegwitAddress(root, path, network) {
+        const child = root.derivePath(path);
+        const { address } = bitcoin.payments.p2wpkh({ 
+          pubkey: child.publicKey,
+          network 
+        });
+        return address;
+      }
+
+      function generateTaprootAddress(root, path, network) {
+        const child = root.derivePath(path);
+        const { address } = bitcoin.payments.p2tr({ 
+          internalPubkey: child.publicKey.slice(1, 33), // Remove the prefix
+          network 
+        });
+        return address;
+      }
+
+      // Address type selector
+      const addressTypeSelector = document.getElementById('addressTypeSelector');
+      const walletAddress = document.getElementById('walletAddress');
+      let currentAddressType = 'taproot'; // Default
+
+      addressTypeSelector.addEventListener('click', function(e) {
+        if (e.target.classList.contains('address-type')) {
+          // Update active state
+          document.querySelectorAll('.address-type').forEach(type => {
+            type.classList.remove('active');
+          });
+          e.target.classList.add('active');
+
+          // Update address type
+          currentAddressType = e.target.dataset.type;
+          updateWalletAddress();
+        }
+      });
+
+      // Regenerate wallet address
+      document.getElementById('regenerateBtn').addEventListener('click', function() {
+        localStorage.removeItem('wallet'); // Clear stored wallet
+        updateWalletAddress(); // Generate new wallet and update display
+      });
+
+      // Get or create wallet
+      function getOrCreateWallet() {
+        let wallet = JSON.parse(localStorage.getItem('wallet'));
+        if (!wallet) {
+          wallet = generateWallet(null, network);
+          localStorage.setItem('wallet', JSON.stringify(wallet));
+        }
+        return wallet;
+      }
+
+      // Update displayed wallet address
+      function updateWalletAddress() {
+        const wallet = getOrCreateWallet();
+        walletAddress.textContent = wallet.addresses[currentAddressType];
+      }
+
+      // Send Bitcoin (mock implementation)
+      document.getElementById('sendBtn').addEventListener('click', function() {
+        alert('Send functionality not fully implemented in this demo. Enter recipient address and amount in a real implementation.');
+      });
+
+      // Receive Bitcoin (mock implementation)
+      document.getElementById('receiveBtn').addEventListener('click', function() {
+        alert(`Receive Bitcoin at: ${walletAddress.textContent}`);
+      });
+
+      // Advanced options toggle
+      const advancedHeader = document.getElementById('advancedHeader');
+      const advancedContent = document.getElementById('advancedContent');
+      advancedHeader.addEventListener('click', function() {
+        advancedContent.style.display = advancedContent.style.display === 'block' ? 'none' : 'block';
+      });
+
+      // QR Scanner functionality
+      const scanBtn = document.getElementById('scanBtn');
+      const qrScanner = document.getElementById('qrScanner');
+      const closeScanner = document.getElementById('closeScanner');
+
+      scanBtn.addEventListener('click', function() {
+        qrScanner.style.display = 'block';
+      });
+
+      closeScanner.addEventListener('click', function() {
+        qrScanner.style.display = 'none';
+      });
+
+      // Initial setup
+      updateWalletAddress();
+    });
+  </script>
+</body>
+</html>
